@@ -1,0 +1,56 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(ggplot2)
+library(lme4)
+```
+
+```{r}
+data = readr::read_csv("~/PycharmProjects/train_cat_vision_rec_model_oPE/results/resnet_ft.csv")
+data$task = "w_cs"
+data = rbind(data
+             ,readr::read_csv("~/PycharmProjects/train_cat_vision_rec_model_oPE/results/resnet_ft_small_samples.csv")
+             ,readr::read_csv("~/PycharmProjects/train_cat_vision_rec_model_oPE/results/resnet_ft_2-4p_samples.csv")
+)
+data$run = rep(seq(1,10,1),length(data$folder)/10)
+summary(data)
+```
+
+```{r}
+pl_df = tidyr::gather(data, Condition, Accuracy, train:test, factor_key=TRUE)
+pl_df$percent_data = round((pl_df$samples/max(pl_df$samples))*100,1)
+ag_dat_pl = aggregate(Accuracy~percent_data+folder+Condition,data=pl_df, FUN=mean)
+ag_dat_pl$sd = aggregate(Accuracy~percent_data+folder+Condition,data=pl_df, FUN=sd)$Accuracy/sqrt(10)
+
+resnet_18_w_cs = ggplot(ag_dat_pl, aes(x=percent_data, y=Accuracy, color=folder)) +
+  #geom_smooth(alpha=.3) +
+  geom_line()+
+  geom_point() +
+  #scale_color_manual(values=c("blue",grey(.4),grey(.3),grey(.2),grey(.1),"red","cyan"))+
+  theme_minimal()+
+  geom_errorbar(aes(ymin = Accuracy - sd, ymax = Accuracy + sd), width = 0.01)+
+    theme(axis.text.x = element_text(angle = 45, hjust = 1), 
+      #plot.title = element_text(size=11)
+      #,
+      legend.position = "top",#panel.grid.major.x = element_line(color = "gray", linetype = "dashed")
+    ) +
+    #ggtitle("ResNet18 Test data accuracy ") +
+    xlab("% of the training dataset")+
+    xlim(.4,1)+
+    ylab("ResNet18: Lexical decision accuracy\ntraining set [Words vs. Consonant strings]")+
+  labs(color = NULL)+
+  facet_wrap(~Condition)+
+  scale_x_log10(breaks = as.numeric(levels(as.factor(ag_dat_pl$percent_data))))+
+  scale_y_continuous(breaks = seq(0.5, 1, 0.1))#c(seq(10, 40, 10), 70, 100))
+resnet_18_w_cs
+```
+```{r}
+tapply(pl_df$Accuracy[pl_df$percent_data<50],pl_df$folder[pl_df$percent_data<50],mean)
+tapply(pl_df$Accuracy,pl_df$folder,sd)
+
+summary(lmer(Accuracy~folder+log10(percent_data)+(1|run),data=subset(pl_df,pl_df$percent_data<50)))
+```
+
